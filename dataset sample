@@ -1,0 +1,4 @@
+customer_id,vehicle_year,vehicle_make,vehicle_model,fuel_type,current_mileage,last_service_date,last_service_cost,reported_issue,recommended_services
+CUST1001,2015,Toyota,Camry,gasoline,85000,2022-11-10,150.0,engine_noise,"oil_change,tire_rotation"
+CUST1002,2018,Honda,Accord,hybrid,42000,2023-02-15,90.0,battery_issue,"battery_check"
+CUST1003,2020,Ford,F-150,diesel,38000,2023-01-05,200.0,brake_problem,"brake_service,oil_change"
