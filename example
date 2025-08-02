@@ -1,0 +1,34 @@
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+class VehicleData(BaseModel):
+    vehicle_year: int
+    vehicle_make: str
+    vehicle_model: str
+    fuel_type: str
+    current_mileage: float
+    last_service_date: str
+    last_service_cost: float
+
+@app.post("/analyze")
+async def analyze_vehicle(vehicle: VehicleData):
+    """Endpoint for vehicle analysis"""
+    vehicle_df = pd.DataFrame([vehicle.dict()])
+    
+    garage_bot = GarageBotAI()
+    garage_bot.load_models("models/garagebot")
+    
+    issues = garage_bot.predict_issues(vehicle_df)
+    services = garage_bot.recommend_services(vehicle_df)
+    
+    return {
+        "status": "success",
+        "analysis": {
+            "predicted_issues": issues['predicted_issues'],
+            "confidence": float(issues['confidence']),
+            "recommended_services": services['recommended_services'],
+            "urgency_score": float(services['urgency_score'])
+        }
+    }
