@@ -1,0 +1,163 @@
+"""
+GarageBot - Intelligent Vehicle Service Platform
+AI-driven diagnostics, service recommendations, and customer management
+"""
+
+import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+import tensorflow as tf
+from tensorflow import keras
+from datetime import datetime
+import joblib
+import warnings
+warnings.filterwarnings('ignore')
+
+class GarageBotAI:
+    def __init__(self):
+        self.diagnosis_model = None
+        self.service_recommender = None
+        self.scaler = StandardScaler()
+        
+    def load_data(self, filepath):
+        """Load vehicle service history data"""
+        try:
+            data = pd.read_csv(filepath, parse_dates=['last_service_date'])
+            print(f"Loaded {len(data)} service records")
+            return data
+        except Exception as e:
+            print(f"Error loading data: {e}")
+            return None
+    
+    def preprocess_data(self, data):
+        """Prepare data for ML models"""
+        # Feature engineering
+        data['days_since_service'] = (datetime.now() - data['last_service_date']).dt.days
+        data['mileage_per_year'] = data['current_mileage'] / (2023 - data['vehicle_year'])
+        
+        # Convert categoricals
+        data = pd.get_dummies(data, columns=['vehicle_make', 'vehicle_model', 'fuel_type'])
+        
+        # Scale numerical features
+        numerical_cols = ['current_mileage', 'days_since_service', 'vehicle_year', 
+                         'mileage_per_year', 'last_service_cost']
+        data[numerical_cols] = self.scaler.fit_transform(data[numerical_cols])
+        
+        return data
+    
+    def train_diagnosis_model(self, data):
+        """Train AI fault detection model"""
+        X = data.drop(['customer_id', 'reported_issue', 'needed_repairs'], axis=1)
+        y = data['reported_issue']
+        
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+        
+        self.diagnosis_model = RandomForestClassifier(n_estimators=200)
+        self.diagnosis_model.fit(X_train, y_train)
+        
+        accuracy = self.diagnosis_model.score(X_test, y_test)
+        print(f"Diagnosis model accuracy: {accuracy:.2f}")
+        
+        return accuracy
+    
+    def build_service_recommender(self, data):
+        """Deep learning model for service recommendations"""
+        X = data.drop(['customer_id', 'recommended_services'], axis=1)
+        y = pd.get_dummies(data['recommended_services'])
+        
+        model = keras.Sequential([
+            keras.layers.Dense(64, activation='relu', input_shape=(X.shape[1],)),
+            keras.layers.Dropout(0.3),
+            keras.layers.Dense(32, activation='relu'),
+            keras.layers.Dense(y.shape[1], activation='sigmoid')
+        ])
+        
+        model.compile(optimizer='adam',
+                     loss='binary_crossentropy',
+                     metrics=['accuracy'])
+        
+        history = model.fit(X, y, epochs=20, validation_split=0.2)
+        self.service_recommender = model
+        
+        return history.history
+    
+    def predict_issues(self, vehicle_data):
+        """Predict potential vehicle issues"""
+        if self.diagnosis_model is None:
+            raise Exception("Diagnosis model not trained")
+            
+        processed_data = self.preprocess_data(vehicle_data)
+        predictions = self.diagnosis_model.predict(processed_data)
+        
+        return {
+            'predicted_issues': predictions[0],
+            'confidence': np.max(self.diagnosis_model.predict_proba(processed_data))
+        }
+    
+    def recommend_services(self, vehicle_data):
+        """Get AI-powered service recommendations"""
+        if self.service_recommender is None:
+            raise Exception("Service recommender not trained")
+            
+        processed_data = self.preprocess_data(vehicle_data)
+        recommendations = self.service_recommender.predict(processed_data)
+        
+        services = ['oil_change', 'tire_rotation', 'brake_service', 
+                   'battery_check', 'filter_replacement']
+        
+        return {
+            'recommended_services': [services[i] for i in range(len(services)) 
+                                   if recommendations[0][i] > 0.5],
+            'urgency_score': np.mean(recommendations[0])
+        }
+    
+    def save_models(self, path_prefix):
+        """Save trained models"""
+        joblib.dump(self.diagnosis_model, f"{path_prefix}_diagnosis_model.pkl")
+        self.service_recommender.save(f"{path_prefix}_service_recommender.h5")
+        print("Models saved successfully")
+    
+    def load_models(self, path_prefix):
+        """Load pre-trained models"""
+        self.diagnosis_model = joblib.load(f"{path_prefix}_diagnosis_model.pkl")
+        self.service_recommender = keras.models.load_model(f"{path_prefix}_service_recommender.h5")
+        print("Models loaded successfully")
+
+
+# Sample Usage
+if __name__ == "__main__":
+    # Initialize system
+    garage_bot = GarageBotAI()
+    
+    # Load sample data
+    service_data = garage_bot.load_data("data/vehicle_service_records.csv")
+    
+    if service_data is not None:
+        # Train models
+        garage_bot.train_diagnosis_model(service_data)
+        garage_bot.build_service_recommender(service_data)
+        
+        # Save trained models
+        garage_bot.save_models("models/garagebot")
+        
+        # Example prediction
+        test_vehicle = pd.DataFrame([{
+            'vehicle_year': 2018,
+            'vehicle_make': 'Toyota',
+            'vehicle_model': 'Camry',
+            'fuel_type': 'gasoline',
+            'current_mileage': 75000,
+            'last_service_date': '2023-01-15',
+            'last_service_cost': 120
+        }])
+        
+        # Get predictions
+        issues = garage_bot.predict_issues(test_vehicle)
+        services = garage_bot.recommend_services(test_vehicle)
+        
+        print("\nVehicle Analysis Results:")
+        print(f"Predicted Issues: {issues['predicted_issues']}")
+        print(f"Recommended Services: {services['recommended_services']}")
+        print(f"Service Urgency: {services['urgency_score']:.2f}")
